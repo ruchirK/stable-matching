@@ -8,46 +8,48 @@ use std::iter::FromIterator;
 use differential_dataflow::input::InputSession;
 use differential_dataflow::operators::{Join, Reduce};
 
+type SuitedId = u32;
+type SuitorId = u32;
+
 #[derive(Debug, Default, Eq, Hash, PartialEq)]
 pub struct Suitor {
-    id: u32,
-    preference_list: Vec<u32>,
-    preference_index: u32,
+    id: SuitorId,
+    preference_set: BTreeMap<SuitedId, usize>,
+    rejections: BTreeSet<SuitedId>,
 }
 
 impl Suitor {
     fn new(id: u32, preference_list: Vec<u32>) -> Self {
         Suitor {
             id,
-            preference_list,
-            preference_index: 0,
+            preference_set: BTreeMap::from_iter(
+                preference_list.iter().enumerate().map(|(i, s)| (*s, i)),
+            ),
+            rejections: BTreeSet::new(),
         }
     }
 
-    fn get_current_preference(&self) -> Option<u32> {
-        if self.preference_index < self.preference_list.len() as u32 {
-            Some(self.preference_list[self.preference_index as usize])
+    fn get_current_preference(&self) -> Option<SuitedId> {
+        let preference = self
+            .preference_set
+            .iter()
+            .filter(|(s, _)| !self.rejections.contains(s))
+            .min_by_key(|(_, p)| *p);
+
+        if let Some((suited, _)) = preference {
+            Some(*suited)
         } else {
             None
         }
     }
 
-    fn increment_preference_index(&mut self) {
-        self.preference_index += 1;
+    fn handle_rejection(&mut self, suited: SuitedId) {
+        self.rejections.insert(suited);
     }
 
     fn prefers_more(&self, assigned: u32, proposed: u32) -> bool {
-        let mut assigned_preference: Option<u32> = None;
-        let mut proposed_preference: Option<u32> = None;
-        for i in 0..self.preference_list.len() {
-            if self.preference_list[i] == assigned {
-                assigned_preference = Some(i as u32);
-            }
-
-            if self.preference_list[i] == proposed {
-                proposed_preference = Some(i as u32);
-            }
-        }
+        let assigned_preference = self.preference_set.get(&assigned);
+        let proposed_preference = self.preference_set.get(&proposed);
 
         match (assigned_preference, proposed_preference) {
             (None, None) => false,
@@ -81,44 +83,32 @@ impl Suited {
     }
 
     fn reject(&mut self) -> Option<IntoIter<u32>> {
-        let mut accept_preference = usize::max_value();
-        let mut accept_suitor = 0;
-
-        if self.current_suitors.is_empty() {
-            return None;
-        }
-
-        for suitor in self.current_suitors.iter() {
-            if let Some(preference) = self.preference_set.get(suitor) {
-                if *preference < accept_preference {
-                    accept_preference = *preference;
-                    accept_suitor = *suitor;
-                }
-            }
-        }
-
-        self.current_accept = Some(accept_suitor);
+        let preference = self
+            .preference_set
+            .iter()
+            .filter(|(s, _)| self.current_suitors.contains(s))
+            .min_by_key(|(_, p)| *p);
         let mut rejections = std::mem::replace(&mut self.current_suitors, BTreeSet::new());
-        rejections.remove(&self.current_accept.expect("current suitor known to exist"));
-        self.current_suitors
-            .insert(self.current_accept.expect("current suitor known to exist"));
+
+        if let Some((suitor, _)) = preference {
+            self.current_accept = Some(*suitor);
+            rejections.remove(suitor);
+            self.current_suitors.insert(*suitor);
+        } else {
+            self.current_accept = None;
+        }
 
         return Some(rejections.into_iter());
     }
 
     fn prefers_more(&self, proposed: u32) -> bool {
-        let mut assigned_preference: Option<usize> = None;
-        let mut proposed_preference: Option<usize> = None;
+        let assigned_preference = if let Some(assigned) = self.current_accept {
+            self.preference_set.get(&assigned)
+        } else {
+            None
+        };
 
-        if let Some(assigned) = self.current_accept {
-            if let Some(preference) = self.preference_set.get(&assigned) {
-                assigned_preference = Some(*preference);
-            }
-        }
-
-        if let Some(preference) = self.preference_set.get(&proposed) {
-            proposed_preference = Some(*preference);
-        }
+        let proposed_preference = self.preference_set.get(&proposed);
 
         match (assigned_preference, proposed_preference) {
             (None, None) => false,
@@ -159,17 +149,15 @@ fn stable_marriages(suitors: &mut [Suitor], suiteds: &mut [Suited]) {
 
         unassigned = HashSet::new();
 
-        for (_, suited) in suiteds.iter_mut() {
+        for (suited_id, suited) in suiteds.iter_mut() {
             if let Some(rejections) = suited.reject() {
-                unassigned.extend(rejections);
-            }
-        }
-
-        for suitor_id in unassigned.iter() {
-            let suitor = suitors.get_mut(&suitor_id);
-
-            if let Some(suitor) = suitor {
-                suitor.increment_preference_index();
+                for r in rejections {
+                    let suitor = suitors.get_mut(&r);
+                    if let Some(suitor) = suitor {
+                        suitor.handle_rejection(*suited_id);
+                        unassigned.insert(r);
+                    }
+                }
             }
         }
     }
