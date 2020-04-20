@@ -91,37 +91,28 @@ impl Suited {
     }
 }
 
-pub fn generate_match(suitors: &[Suitor], suiteds: &[Suited]) {
-    let mut unassigned: HashSet<_> = HashSet::from_iter(suitors.iter().map(|s| s.id));
+pub fn generate_match_inner(suitors: &[Suitor], suiteds: &[Suited]) -> HashMap<SuitedId, SuitorId> {
+    // let mut unassigned: HashSet<_> = HashSet::from_iter(suitors.iter().map(|s| s.id));
     let mut rejections: HashMap<_, _> =
         HashMap::from_iter(suitors.iter().map(|s| (s.id, BTreeSet::new())));
-    let mut matching: HashMap<SuitorId, SuitedId> = HashMap::new();
     let suiteds: HashMap<_, _> = HashMap::from_iter(suiteds.iter().map(|s| (s.id, s)));
     let suitors: HashMap<_, _> = HashMap::from_iter(suitors.iter().map(|s| (s.id, s)));
 
-    while !unassigned.is_empty() {
+    loop {
         let mut proposals: HashMap<_, _> =
             HashMap::from_iter(suiteds.iter().map(|(id, _)| (id, BTreeSet::new())));
 
-        for suitor_id in unassigned.iter() {
-            let suitor = suitors.get(&suitor_id);
-
-            if suitor.is_none() {
-                continue;
-            }
-
+        for (suitor_id, suitor) in suitors.iter() {
             let rejection = rejections.get_mut(&suitor_id);
-
             if rejection.is_none() {
                 continue;
             }
-
-            let suitor = suitor.expect("suitor known to exist");
             let rejection = rejection.expect("rejection known to exist");
 
             let preference = suitor.get_current_preference(&rejection);
 
             if preference.is_none() {
+                // this should never happen
                 continue;
             }
 
@@ -132,8 +123,7 @@ pub fn generate_match(suitors: &[Suitor], suiteds: &[Suited]) {
             }
         }
 
-        unassigned = HashSet::new();
-
+        let mut matching: HashMap<SuitorId, SuitedId> = HashMap::new();
         for (suited_id, suited) in suiteds.iter() {
             let proposal = proposals.get_mut(&suited_id);
 
@@ -155,15 +145,20 @@ pub fn generate_match(suitors: &[Suitor], suiteds: &[Suited]) {
                 let rejection = rejections.get_mut(&r);
                 if let Some(rejection) = rejection {
                     rejection.insert(*suited_id);
-                    unassigned.insert(*r);
                 }
             }
         }
+
+        if matching.len() == suitors.len() {
+            verify_match(&suitors, &suiteds, &matching);
+            return matching;
+        }
     }
+}
 
+pub fn generate_match(suitors: &[Suitor], suiteds: &[Suited]) {
+    let matching = generate_match_inner(suitors, suiteds);
     println!("{:?}", matching);
-
-    verify_match(&suitors, &suiteds, &matching);
 }
 
 fn verify_match(
