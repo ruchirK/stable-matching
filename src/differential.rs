@@ -4,9 +4,11 @@ extern crate timely;
 use differential_dataflow::input::{Input, InputSession};
 use differential_dataflow::lattice::Lattice;
 use differential_dataflow::operators::{Consolidate, Iterate, Join, Reduce};
+use differential_dataflow::operators::iterate::Variable;
 use differential_dataflow::Collection;
 use timely::dataflow::ProbeHandle;
 use timely::dataflow::Scope;
+use timely::order::Product;
 
 use crate::stable_marriage::{Suited, Suitor};
 
@@ -54,8 +56,8 @@ pub fn generate_match(suitors: Vec<Suitor>, suiteds: Vec<Suited>) {
     .expect("completed without errors");
 }
 
-fn generate_match_dataflow<G: Scope>(
-    scope: &mut G,
+fn generate_match_dataflow<G: Scope<Timestamp=u32>>(
+    _scope: &mut G,
     suitors: &Collection<G, (u32, u32, usize)>,
     suiteds: &Collection<G, (u32, u32, usize)>,
 ) -> Collection<G, (u32, u32)>
@@ -64,8 +66,12 @@ where
 {
     let rejections = suitors
         .map(|(suitor, suited, _)| (suitor, suited))
-        .filter(|_| false)
-        .iterate(|rejections_inner| {
+        .filter(|_| false);
+
+    rejections.inner.scope().scoped::<Product<u32, u32>, _, _,>("Test", |nested| {
+            let summary = Product::new(Default::default(), 1);
+            let rejections_inner  = Variable::new_from(rejections.enter(nested), summary);
+
             let suitors = suitors.enter(&rejections_inner.scope());
             let suiteds = suiteds.enter(&rejections_inner.scope());
 
@@ -73,7 +79,7 @@ where
 
             let proposals = suitors
                 .map(|(suitor, suited, preference)| ((suitor, suited), preference))
-                .antijoin(rejections_inner)
+                .antijoin(&rejections_inner)
                 .map(|((suitor, suited), preference)| (suitor, (preference, suited)))
                 .reduce(|_suitor, input, output| {
                     let mut min_index = 0;
@@ -110,7 +116,9 @@ where
             let rejected = proposals
                 .antijoin(&acceptances_inner)
                 .map(|((suited, suitor), ())| (suitor, suited));
-            rejections_inner.concat(&rejected).consolidate()
+            let final_rejections = rejections_inner.concat(&rejected).consolidate();
+            rejections_inner.set(&final_rejections);
+            final_rejections.leave()
         });
     let proposals = suitors
         .map(|(suitor, suited, preference)| ((suitor, suited), preference))
