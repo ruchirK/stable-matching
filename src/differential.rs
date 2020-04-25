@@ -20,7 +20,7 @@ pub fn generate_match(suitors: Vec<Suitor>, suiteds: Vec<Suited>) {
             let (suitors_input, suitors) = scope.new_collection();
             let (suiteds_input, suiteds) = scope.new_collection();
 
-            let result = generate_match_dataflow(scope, &suitors, &suiteds);
+            let result = generate_match_dataflow_v2(&suitors, &suiteds);
 
             result
                 .inspect(|x| println!("result: {:?}", x))
@@ -57,7 +57,6 @@ pub fn generate_match(suitors: Vec<Suitor>, suiteds: Vec<Suited>) {
 }
 
 fn generate_match_dataflow<G: Scope<Timestamp = u32>>(
-    _scope: &mut G,
     suitors: &Collection<G, (u32, u32, usize)>,
     suiteds: &Collection<G, (u32, u32, usize)>,
 ) -> Collection<G, (u32, u32)>
@@ -114,7 +113,7 @@ where
 
                     output.push((*input[min_index].0, 1));
                 })
-                .map(|(suited, (_, suitor))| (suited, suitor))
+                .map(|(suited, (_, suitor))| (suitor, suited))
                 .consolidate()
                 .inspect(|x| println!("acceptances (nested): (suited, suitor) {:?}", x));
 
@@ -124,5 +123,77 @@ where
             let final_rejections = rejections_inner.concat(&rejected).consolidate();
             rejections_inner.set(&final_rejections);
             accepted.leave()
+        })
+}
+
+fn generate_match_dataflow_v2<G: Scope<Timestamp = u32>>(
+    suitors: &Collection<G, (u32, u32, usize)>,
+    suiteds: &Collection<G, (u32, u32, usize)>,
+) -> Collection<G, (u32, u32)>
+where
+    G::Timestamp: Lattice + Ord,
+{
+    let active = suitors
+        .map(|(suitor, suited, pref)| ((suitor, suited), pref))
+        .join(&suiteds.map(|(suited, suitor, pref)| ((suitor, suited), pref)))
+        .map(|((suitor, suited), (suitor_pref, suited_pref))| {
+            (suitor, suitor_pref, suited, suited_pref)
+        });
+
+    active
+        .inner
+        .scope()
+        .scoped::<Product<u32, u32>, _, _>("Test", |nested| {
+            let summary = Product::new(Default::default(), 1);
+            let active_inner = Variable::new_from(active.enter(nested), summary);
+
+            let proposals = active_inner
+                .map(|(suitor, suitor_pref, suited, suited_pref)| {
+                    (suitor, (suitor_pref, suited, suited_pref))
+                })
+                .reduce(|_suitor, input, output| {
+                    let mut min_index = 0;
+
+                    for i in 1..input.len() {
+                        if (input[i].0).0 < (input[min_index].0).0 {
+                            min_index = i;
+                        }
+                    }
+
+                    output.push((*input[min_index].0, 1));
+                })
+                .map(|(suitor, (suitor_pref, suited, suited_pref))| {
+                    (suitor, suitor_pref, suited, suited_pref)
+                })
+                .inspect(|x| println!("proposal:{:?}", x));
+
+            let accepted = proposals
+                .map(|(suitor, suitor_pref, suited, suited_pref)| {
+                    (suited, (suited_pref, suitor, suitor_pref))
+                })
+                .reduce(|_suited, input, output| {
+                    let mut min_index = 0;
+
+                    for i in 1..input.len() {
+                        if (input[i].0).0 < (input[min_index].0).0 {
+                            min_index = i;
+                        }
+                    }
+
+                    output.push((*input[min_index].0, 1));
+                })
+                .map(|(suited, (suited_pref, suitor, suitor_pref))| {
+                    (suitor, suitor_pref, suited, suited_pref)
+                })
+                .inspect(|x| println!("acceptances: {:?}", x));
+
+            let active_final = &active_inner
+                .concat(&proposals.negate())
+                .concat(&accepted)
+                .consolidate();
+            active_inner.set(&active_final);
+            accepted
+                .map(|(suitor, _, suited, _)| (suitor, suited))
+                .leave()
         })
 }
