@@ -1,10 +1,10 @@
 extern crate differential_dataflow;
 extern crate timely;
 
-use differential_dataflow::input::{Input, InputSession};
+use differential_dataflow::input::Input;
 use differential_dataflow::lattice::Lattice;
-use differential_dataflow::operators::{Consolidate, Iterate, Join, Reduce};
 use differential_dataflow::operators::iterate::Variable;
+use differential_dataflow::operators::{Consolidate, Join, Reduce};
 use differential_dataflow::Collection;
 use timely::dataflow::ProbeHandle;
 use timely::dataflow::Scope;
@@ -20,7 +20,7 @@ pub fn generate_match(suitors: Vec<Suitor>, suiteds: Vec<Suited>) {
             let (suitors_input, suitors) = scope.new_collection();
             let (suiteds_input, suiteds) = scope.new_collection();
 
-            let mut result = generate_match_dataflow(scope, &suitors, &suiteds);
+            let result = generate_match_dataflow(scope, &suitors, &suiteds);
 
             result
                 .inspect(|x| println!("result: {:?}", x))
@@ -56,7 +56,7 @@ pub fn generate_match(suitors: Vec<Suitor>, suiteds: Vec<Suited>) {
     .expect("completed without errors");
 }
 
-fn generate_match_dataflow<G: Scope<Timestamp=u32>>(
+fn generate_match_dataflow<G: Scope<Timestamp = u32>>(
     _scope: &mut G,
     suitors: &Collection<G, (u32, u32, usize)>,
     suiteds: &Collection<G, (u32, u32, usize)>,
@@ -67,20 +67,19 @@ where
     let rejections = suitors
         .map(|(suitor, suited, _)| (suitor, suited))
         .filter(|_| false);
-    
-    let acceptances = suitors
-        .map(|(suitor, suited, _)| (suitor, suited))
-        .filter(|_| false);
 
-    rejections.inner.scope().scoped::<Product<u32, u32>, _, _,>("Test", |nested| {
+    rejections
+        .inner
+        .scope()
+        .scoped::<Product<u32, u32>, _, _>("Test", |nested| {
             let summary = Product::new(Default::default(), 1);
-            let rejections_inner  = Variable::new_from(rejections.enter(nested), summary);
-            let acceptances_inner  = Variable::new_from(acceptances.enter(nested), summary);
+            let rejections_inner = Variable::new_from(rejections.enter(nested), summary);
 
             let suitors = suitors.enter(&rejections_inner.scope());
             let suiteds = suiteds.enter(&rejections_inner.scope());
 
-            rejections_inner.inspect(|x| println!("rejections (nested): (suitor, suited): {:?}", x));
+            rejections_inner
+                .inspect(|x| println!("rejections (nested): (suitor, suited): {:?}", x));
 
             let proposals = suitors
                 .map(|(suitor, suited, preference)| ((suitor, suited), preference))
@@ -115,7 +114,7 @@ where
 
                     output.push((*input[min_index].0, 1));
                 })
-                .map(|(suited, (preference, suitor))| (suited, suitor))
+                .map(|(suited, (_, suitor))| (suited, suitor))
                 .consolidate()
                 .inspect(|x| println!("acceptances (nested): (suited, suitor) {:?}", x));
 
@@ -124,7 +123,6 @@ where
                 .map(|((suited, suitor), ())| (suitor, suited));
             let final_rejections = rejections_inner.concat(&rejected).consolidate();
             rejections_inner.set(&final_rejections);
-            acceptances_inner.set(&accepted);
             accepted.leave()
         })
 }
