@@ -67,10 +67,15 @@ where
     let rejections = suitors
         .map(|(suitor, suited, _)| (suitor, suited))
         .filter(|_| false);
+    
+    let acceptances = suitors
+        .map(|(suitor, suited, _)| (suitor, suited))
+        .filter(|_| false);
 
-    let rejections_iterative = rejections.inner.scope().scoped::<Product<u32, u32>, _, _,>("Test", |nested| {
+    rejections.inner.scope().scoped::<Product<u32, u32>, _, _,>("Test", |nested| {
             let summary = Product::new(Default::default(), 1);
             let rejections_inner  = Variable::new_from(rejections.enter(nested), summary);
+            let acceptances_inner  = Variable::new_from(acceptances.enter(nested), summary);
 
             let suitors = suitors.enter(&rejections_inner.scope());
             let suiteds = suiteds.enter(&rejections_inner.scope());
@@ -95,7 +100,7 @@ where
                 .map(|(suitor, (preference, suited))| ((suited, suitor), ()))
                 .inspect(|x| println!("proposal (nested): (suited, suitor)  {:?}", x));
 
-            let acceptances_inner = suiteds
+            let accepted = suiteds
                 .map(|(suited, suitor, preference)| ((suited, suitor), preference))
                 .join(&proposals)
                 .map(|((suited, suitor), preference)| (suited, (preference, suitor)))
@@ -111,50 +116,15 @@ where
                     output.push((*input[min_index].0, 1));
                 })
                 .map(|(suited, (preference, suitor))| (suited, suitor))
+                .consolidate()
                 .inspect(|x| println!("acceptances (nested): (suited, suitor) {:?}", x));
 
             let rejected = proposals
-                .antijoin(&acceptances_inner)
+                .antijoin(&accepted)
                 .map(|((suited, suitor), ())| (suitor, suited));
             let final_rejections = rejections_inner.concat(&rejected).consolidate();
             rejections_inner.set(&final_rejections);
-            final_rejections.leave()
-        });
-    let proposals = suitors
-        .map(|(suitor, suited, preference)| ((suitor, suited), preference))
-        .antijoin(&rejections_iterative)
-        .map(|((suitor, suited), preference)| (suitor, (preference, suited)))
-        .reduce(|_suitor, input, output| {
-            let mut min_index = 0;
-
-            for i in 1..input.len() {
-                if (input[i].0).0 < (input[min_index].0).0 {
-                    min_index = i;
-                }
-            }
-
-            output.push((*input[min_index].0, 1));
+            acceptances_inner.set(&accepted);
+            accepted.leave()
         })
-        .map(|(suitor, (preference, suited))| ((suited, suitor), ()))
-        .inspect(|x| println!("proposal: (suited, suitor)  {:?}", x));
-
-    let acceptances = suiteds
-        .map(|(suited, suitor, preference)| ((suited, suitor), preference))
-        .join(&proposals)
-        .map(|((suited, suitor), preference)| (suited, (preference, suitor)))
-        .reduce(|_suited, input, output| {
-            let mut min_index = 0;
-
-            for i in 1..input.len() {
-                if (input[i].0).0 < (input[min_index].0).0 {
-                    min_index = i;
-                }
-            }
-
-            output.push((*input[min_index].0, 1));
-        })
-        .map(|(suited, (preference, suitor))| (suitor, suited))
-        .inspect(|x| println!("acceptances (suitor, suited) {:?}", x));
-
-    acceptances
 }
