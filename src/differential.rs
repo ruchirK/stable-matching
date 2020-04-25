@@ -68,7 +68,7 @@ where
         .map(|(suitor, suited, _)| (suitor, suited))
         .filter(|_| false);
 
-    rejections.inner.scope().scoped::<Product<u32, u32>, _, _,>("Test", |nested| {
+    let rejections_iterative = rejections.inner.scope().scoped::<Product<u32, u32>, _, _,>("Test", |nested| {
             let summary = Product::new(Default::default(), 1);
             let rejections_inner  = Variable::new_from(rejections.enter(nested), summary);
 
@@ -122,7 +122,7 @@ where
         });
     let proposals = suitors
         .map(|(suitor, suited, preference)| ((suitor, suited), preference))
-        .antijoin(&rejections)
+        .antijoin(&rejections_iterative)
         .map(|((suitor, suited), preference)| (suitor, (preference, suited)))
         .reduce(|_suitor, input, output| {
             let mut min_index = 0;
