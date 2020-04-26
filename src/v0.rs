@@ -20,6 +20,7 @@ impl<'a> Proposer<'a> {
             id,
             preferences,
             preferences_index: preferences.len() - 1,
+            // preferences_index: 0,
         }
     }
 
@@ -165,11 +166,12 @@ pub fn stable_matching(
         }
     }
 
+    // Return a mapping from ProposerId : ResponderId
     Ok(HashMap::from_iter(responders.iter().map(|r| {
         (
-            r.id,
             r.accepted
                 .expect("every responder should be matched with a proposer"),
+            r.id,
         )
     })))
 }

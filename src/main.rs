@@ -73,15 +73,22 @@ fn main() {
 
     println!("Matching: {:?} valid: {}", matching, valid);
 
-    let proposers: Vec<ProposerInput>  = proposers.iter().map(|p| { let mut pref = p.preferences.clone();
-                                                                   pref.reverse();
-                                                                   ProposerInput::new(p.id, pref)
-                                                                  } ).collect(); 
-    let responders: Vec<ResponderInput>  = responders.iter().map(|r| {
-                             let mut pref = r.preferences.clone();
-                             pref.reverse();
-                             ResponderInput::new(r.id, pref)
-    }).collect(); 
+    let proposers: Vec<ProposerInput> = proposers
+        .iter()
+        .map(|p| {
+            let mut pref = p.preferences.clone();
+            pref.reverse();
+            ProposerInput::new(p.id, pref)
+        })
+        .collect();
+    let responders: Vec<ResponderInput> = responders
+        .iter()
+        .map(|r| {
+            let mut pref = r.preferences.clone();
+            pref.reverse();
+            ResponderInput::new(r.id, pref)
+        })
+        .collect();
     let matching: HashMap<u32, u32> = v0::stable_matching(&proposers, &responders).unwrap();
     let valid: bool = input::validate_matching(&proposers, &responders, &matching);
     println!("Matching: {:?} valid: {}", matching, valid);
