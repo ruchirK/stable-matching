@@ -2,7 +2,7 @@ use std::collections::btree_set::IntoIter;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::iter::FromIterator;
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 
 use crate::input::{ProposerId, ProposerInput, ResponderId, ResponderInput};
 
@@ -15,24 +15,37 @@ struct Proposer<'a> {
 }
 
 impl<'a> Proposer<'a> {
-    fn new(id: ProposerId, preferences: &'a [ResponderId]) -> Self {
-        Proposer {
+    fn new(id: ProposerId, preferences: &'a [ResponderId]) -> Result<Self> {
+        if id as usize >= preferences.len() {
+            bail!(
+                "received invalid proposer input id: {} preferences: {:?}",
+                id,
+                preferences
+            );
+        }
+
+        for p in preferences.iter() {
+            if *p as usize >= preferences.len() {
+                bail!("received invalid preferences: {:?}", preferences);
+            }
+        }
+
+        Ok(Proposer {
             id,
             preferences,
             preferences_index: preferences.len() - 1,
-            // preferences_index: 0,
-        }
+        })
     }
 
     fn get_preference(&self) -> ResponderId {
         self.preferences[self.preferences_index]
     }
 
-    fn add_rejection(&mut self) {
+    fn add_rejection(&mut self) -> Result<()> {
         if self.preferences_index > 0 {
-            self.preferences_index -= 1;
+            Ok(self.preferences_index -= 1)
         } else {
-            panic!("proposer {} received too many rejections", self.id);
+            bail!("proposer {} received too many rejections", self.id);
         }
     }
 }
@@ -51,20 +64,41 @@ pub struct Responder<'a> {
 }
 
 impl<'a> Responder<'a> {
-    fn new(id: u32, preferences: &'a [ProposerId]) -> Self {
+    fn new(id: u32, preferences: &'a [ProposerId]) -> Result<Self> {
+        if id as usize >= preferences.len() {
+            bail!(
+                "received invalid responder input id: {} preferences: {:?}",
+                id,
+                preferences
+            );
+        }
+
+        for p in preferences.iter() {
+            if *p as usize >= preferences.len() {
+                bail!("received invalid preferences: {:?}", preferences);
+            }
+        }
+
         let mut preferences_by_proposer: Vec<usize> = vec![0; preferences.len()];
 
         for (index, p) in preferences.iter().enumerate() {
+            if preferences_by_proposer[*p as usize] != 0 {
+                bail!(
+                    "received duplicate preferences in responder: {} preferences: {:?}",
+                    id,
+                    preferences
+                );
+            }
             preferences_by_proposer[*p as usize] = index;
         }
 
-        Responder {
+        Ok(Responder {
             id,
             preferences,
             preferences_by_proposer,
             proposals: BTreeSet::new(),
             accepted: None,
-        }
+        })
     }
 
     fn add_proposal(&mut self, proposer: ProposerId) {
@@ -127,16 +161,14 @@ pub fn stable_matching(
     proposers_input: &[ProposerInput],
     responders_input: &[ResponderInput],
 ) -> Result<HashMap<ProposerId, ResponderId>> {
-    let mut proposers: Vec<_> = Vec::from_iter(
-        proposers_input
-            .iter()
-            .map(|p| Proposer::new(p.id, &p.preferences)),
-    );
-    let mut responders: Vec<_> = Vec::from_iter(
-        responders_input
-            .iter()
-            .map(|r| Responder::new(r.id, &r.preferences)),
-    );
+    let mut proposers: Vec<_> = proposers_input
+        .iter()
+        .map(|p| Proposer::new(p.id, &p.preferences))
+        .collect::<Result<_>>()?;
+    let mut responders: Vec<_> = responders_input
+        .iter()
+        .map(|r| Responder::new(r.id, &r.preferences))
+        .collect::<Result<_>>()?;
     let mut unassigned: HashSet<_> = HashSet::from_iter(proposers_input.iter().map(|p| p.id));
 
     while !unassigned.is_empty() {
@@ -162,7 +194,7 @@ pub fn stable_matching(
         // All rejected Proposers need to update who they can propose to next time
         for p in unassigned.iter() {
             let proposer = &mut proposers[*p as usize];
-            proposer.add_rejection();
+            proposer.add_rejection()?;
         }
     }
 
