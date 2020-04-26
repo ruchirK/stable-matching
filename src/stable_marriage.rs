@@ -1,5 +1,4 @@
-use std::collections::btree_set::IntoIter;
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::iter::FromIterator;
 
 pub type SuitedId = u32;
