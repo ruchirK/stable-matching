@@ -2,6 +2,9 @@ use std::collections::HashMap;
 use std::iter::{FromIterator, Iterator};
 use std::slice::Iter;
 
+use rand::rngs::ThreadRng;
+use rand::seq::SliceRandom;
+
 pub type ProposerId = u32;
 pub type ResponderId = u32;
 
@@ -108,4 +111,24 @@ pub fn validate_matching(
     }
 
     return true;
+}
+
+pub fn random_input(n: u32, rng: &mut ThreadRng) -> (Vec<ProposerInput>, Vec<ResponderInput>) {
+    let mut proposers = Vec::with_capacity(n as usize);
+    let mut responders = Vec::with_capacity(n as usize);
+
+    let preferences: Vec<u32> = (0..n).collect();
+
+    for i in 0..n {
+        let mut proposer_pref = preferences.clone();
+        proposer_pref.shuffle(rng);
+
+        proposers.push(ProposerInput::new(i, proposer_pref));
+
+        let mut responder_pref = preferences.clone();
+        responder_pref.shuffle(rng);
+        responders.push(ResponderInput::new(i, responder_pref));
+    }
+
+    (proposers, responders)
 }

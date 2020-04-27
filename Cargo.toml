@@ -10,6 +10,7 @@ edition = "2018"
 anyhow = "1.0.28"
 timely = { git = "https://github.com/TimelyDataflow/timely-dataflow" }
 differential-dataflow = { git = "https://github.com/TimelyDataflow/differential-dataflow" }
+rand = "0.7.3"
 
 # timely = "0.11.1"
 # differential-dataflow = "0.11"

@@ -207,3 +207,21 @@ pub fn stable_matching(
         )
     })))
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn basic_v0_test() {
+        let mut rng = rand::thread_rng();
+        for n in 1..100 {
+            let (proposers, responders) = crate::input::random_input(n, &mut rng);
+
+            let matching = super::stable_matching(&proposers, &responders).unwrap();
+
+            assert_eq!(
+                crate::input::validate_matching(&proposers, &responders, &matching),
+                true
+            );
+        }
+    }
+}
