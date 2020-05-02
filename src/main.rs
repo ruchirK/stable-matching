@@ -4,6 +4,7 @@ mod differential;
 mod input;
 mod stable_marriage;
 mod v0;
+mod v1;
 
 use input::{ProposerInput, ResponderInput};
 use stable_marriage::{Suited, Suitor};

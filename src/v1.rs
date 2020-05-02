@@ -15,8 +15,8 @@ struct Proposer {
 }
 
 impl Proposer {
-    fn new(id: ProposerId, preferences: &[ResponderId]) -> Result<Self> {
-        Ok(Proposer {
+    fn new(id: ProposerId, preferences: &[ResponderId]) -> Self {
+        Proposer {
             id,
             preferences: preferences
                 .iter()
@@ -24,7 +24,7 @@ impl Proposer {
                 .map(|(i, responder)| (*responder, i))
                 .collect(),
             rejections: BTreeSet::new(),
-        })
+        }
     }
 
     fn get_preference(&self) -> Result<ResponderId> {
@@ -62,8 +62,8 @@ pub struct Responder {
 }
 
 impl Responder {
-    fn new(id: u32, preferences: &[ProposerId]) -> Result<Self> {
-        Ok(Responder {
+    fn new(id: u32, preferences: &[ProposerId]) -> Self {
+        Responder {
             id,
             preferences: preferences
                 .iter()
@@ -72,7 +72,7 @@ impl Responder {
                 .collect(),
             proposals: BTreeSet::new(),
             accepted: None,
-        })
+        }
     }
 
     fn add_proposal(&mut self, proposer: ProposerId) {
@@ -106,23 +106,25 @@ pub fn stable_matching(
     proposers_input: &[ProposerInput],
     responders_input: &[ResponderInput],
 ) -> Result<HashMap<ProposerId, ResponderId>> {
-    let mut proposers: Vec<_> = proposers_input
+    let mut proposers: HashMap<_, _> = proposers_input
         .iter()
-        .map(|p| Proposer::new(p.id, &p.preferences))
-        .collect::<Result<_>>()?;
-    let mut responders: Vec<_> = responders_input
+        .map(|p| (p.id, Proposer::new(p.id, &p.preferences)))
+        .collect();
+    let mut responders: HashMap<_, _> = responders_input
         .iter()
-        .map(|r| Responder::new(r.id, &r.preferences))
-        .collect::<Result<_>>()?;
+        .map(|r| (r.id, Responder::new(r.id, &r.preferences)))
+        .collect();
     let mut unassigned: HashSet<_> = HashSet::from_iter(proposers_input.iter().map(|p| p.id));
 
     while !unassigned.is_empty() {
         // All unassigned Proposers propose to their highest ranked Responder
         // that has not already rejected them
         for p in unassigned.iter() {
-            let proposer = &proposers[*p as usize];
+            let proposer = &proposers[p];
             let preference = proposer.get_preference()?;
-            let to_propose = &mut responders[preference as usize];
+            let to_propose = responders
+                .get_mut(&preference)
+                .expect("responder known to exist");
             to_propose.add_proposal(*p);
         }
 
@@ -130,11 +132,13 @@ pub fn stable_matching(
 
         // All Responders check if they have to reject any Proposers
         // Any Proposers that have been rejected are therefore unassigned
-        for r in responders.iter_mut() {
-            if let Some(rejections) = r.reject() {
+        for (responder_id, responder) in responders.iter_mut() {
+            if let Some(rejections) = responder.reject() {
                 for rejected_proposer in rejections {
-                    let proposer = &mut proposers[rejected_proposer as usize];
-                    proposer.add_rejection(r.id);
+                    let proposer = proposers
+                        .get_mut(&rejected_proposer)
+                        .expect("proposer known to exist");
+                    proposer.add_rejection(*responder_id);
                     unassigned.insert(rejected_proposer);
                 }
             }
@@ -142,7 +146,7 @@ pub fn stable_matching(
     }
 
     // Return a mapping from ProposerId : ResponderId
-    Ok(HashMap::from_iter(responders.iter().map(|r| {
+    Ok(HashMap::from_iter(responders.iter().map(|(_, r)| {
         (
             r.accepted
                 .expect("every responder should be matched with a proposer"),
@@ -154,7 +158,7 @@ pub fn stable_matching(
 #[cfg(test)]
 mod tests {
     #[test]
-    fn basic_v0_test() {
+    fn basic_v1_test() {
         let mut rng = rand::thread_rng();
         for n in 1..100 {
             let (proposers, responders) = crate::input::random_input(n, &mut rng);
