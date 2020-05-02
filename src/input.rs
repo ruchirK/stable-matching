@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::iter::{FromIterator, Iterator};
 use std::slice::Iter;
 
+use anyhow::Result;
 use rand::rngs::ThreadRng;
 use rand::seq::SliceRandom;
 
@@ -113,7 +114,7 @@ pub fn validate_matching(
     return true;
 }
 
-pub fn random_input(n: u32, rng: &mut ThreadRng) -> (Vec<ProposerInput>, Vec<ResponderInput>) {
+fn random_input(n: u32, rng: &mut ThreadRng) -> (Vec<ProposerInput>, Vec<ResponderInput>) {
     let mut proposers = Vec::with_capacity(n as usize);
     let mut responders = Vec::with_capacity(n as usize);
 
@@ -131,4 +132,17 @@ pub fn random_input(n: u32, rng: &mut ThreadRng) -> (Vec<ProposerInput>, Vec<Res
     }
 
     (proposers, responders)
+}
+
+pub fn basic_test(
+    f: fn(&[ProposerInput], &[ResponderInput]) -> Result<HashMap<ProposerId, ResponderId>>,
+) {
+    let mut rng = rand::thread_rng();
+    for n in 1..100 {
+        let (proposers, responders) = random_input(n, &mut rng);
+
+        let matching = f(&proposers, &responders).unwrap();
+
+        assert_eq!(validate_matching(&proposers, &responders, &matching), true);
+    }
 }
