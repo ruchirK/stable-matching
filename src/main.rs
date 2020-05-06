@@ -5,6 +5,7 @@ mod input;
 mod stable_marriage;
 mod v0;
 mod v1;
+mod v2;
 
 use input::{ProposerInput, ResponderInput};
 use stable_marriage::{Suited, Suitor};

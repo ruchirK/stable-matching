@@ -30,7 +30,7 @@ impl Proposer {
     fn get_preference(&self) -> Result<ResponderId> {
         // Get the most preferred Responder that has not already rejected
         // Note that even though we are using a "filter", we are
-        // computing preferences - rejections or antijoins
+        // computing (preferences - rejections) or an antijoin
         let preference = self
             .preferences
             .iter()
