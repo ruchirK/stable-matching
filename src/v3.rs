@@ -142,7 +142,7 @@ where
         })
 }
 
-fn validate_matching<G: Scope>(
+pub fn validate_matching<G: Scope>(
     proposers: &Collection<G, (u32, u32, usize)>,
     responders: &Collection<G, (u32, u32, usize)>,
     matching: &Collection<G, (u32, u32)>,
