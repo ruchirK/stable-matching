@@ -114,7 +114,7 @@ pub fn validate_matching(
     return true;
 }
 
-fn random_input(n: u32, rng: &mut ThreadRng) -> (Vec<ProposerInput>, Vec<ResponderInput>) {
+pub fn random_input(n: u32, rng: &mut ThreadRng) -> (Vec<ProposerInput>, Vec<ResponderInput>) {
     let mut proposers = Vec::with_capacity(n as usize);
     let mut responders = Vec::with_capacity(n as usize);
 
